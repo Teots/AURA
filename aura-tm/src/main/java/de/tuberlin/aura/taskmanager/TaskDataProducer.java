@@ -60,11 +60,6 @@ public final class TaskDataProducer implements DataProducer {
 
         this.outputAllocator = outputAllocator;
 
-        // event handling.
-        this.producerEventHandler = new ProducerEventHandler();
-
-        driverContext.driverDispatcher.addEventListener(IOEvents.DataEventType.DATA_EVENT_OUTPUT_CHANNEL_CONNECTED, producerEventHandler);
-
         this.taskIDToGateIndex = new HashMap<>();
 
         this.channelIndexToTaskID = new HashMap<>();
@@ -74,6 +69,10 @@ public final class TaskDataProducer implements DataProducer {
         this.outputGates = createOutputGates();
 
         connectOutputDataChannels();
+
+        // event handling.
+        this.producerEventHandler = new ProducerEventHandler();
+        driverContext.driverDispatcher.addEventListener(IOEvents.DataEventType.DATA_EVENT_OUTPUT_CHANNEL_CONNECTED, producerEventHandler);
     }
 
     // ---------------------------------------------------

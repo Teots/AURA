@@ -34,35 +34,39 @@ public class SanityEvaluator {
 
         File rootFolder = new File(this.path);
         for (File nodeFolder : rootFolder.listFiles()) {
-            for (File file : nodeFolder.listFiles()) {
-                // Read logs.
-                if (file.isFile()) {
-                    checkForExceptions(file);
-                } else {
-                    // Read the content of folders
-                    for (File measurementFile : file.listFiles()) {
-                        try {
-                            BufferedReader br = new BufferedReader(new FileReader(measurementFile));
-                            String line = null;
-                            while ((line = br.readLine()) != null) {
-                                if (line.contains("SOURCE")) {
-                                    String[] tokens = line.split("\\t");
-                                    sumSources += Integer.parseInt(tokens[2]);
-                                } else if (line.contains("SINK")) {
-                                    String[] tokens = line.split("\\t");
-                                    sumSinks += Integer.parseInt(tokens[2]);
+            if (nodeFolder.isDirectory()) {
+                for (File file : nodeFolder.listFiles()) {
+                    // Read logs.
+                    if (file.isFile()) {
+                        checkForExceptions(file);
+                    } else {
+                        // Read the content of folders
+                        for (File measurementFile : file.listFiles()) {
+                            try {
+                                BufferedReader br = new BufferedReader(new FileReader(measurementFile));
+                                String line = null;
+                                while ((line = br.readLine()) != null) {
+                                    if (line.contains("SOURCE")) {
+                                        String[] tokens = line.split("\\t");
+                                        sumSources += Integer.parseInt(tokens[2]);
+                                    } else if (line.contains("SINK")) {
+                                        String[] tokens = line.split("\\t");
+                                        sumSinks += Integer.parseInt(tokens[2]);
+                                    }
                                 }
+
+                                br.close();
+                            } catch (FileNotFoundException e) {
+                                e.printStackTrace();
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
 
-                            br.close();
-                        } catch (FileNotFoundException e) {
-                            e.printStackTrace();
-                        } catch (IOException e) {
-                            e.printStackTrace();
                         }
-
                     }
                 }
+            } else {
+                checkForExceptions(nodeFolder);
             }
         }
 
@@ -84,7 +88,7 @@ public class SanityEvaluator {
             BufferedReader br = new BufferedReader(new FileReader(file));
             String line = null;
             while ((line = br.readLine()) != null) {
-                if (line.toLowerCase().contains("exception") || line.contains("ERROR") || line.contains("WARN")) {
+                if (line.toLowerCase().contains("exception") || line.contains(" ERROR ") || line.contains(" WARN ")) {
                     System.out.print(file.getPath() + " -> ");
                     System.out.println(line);
                 } else if (line.contains("TASK_STATE_RUNNING  [TASK_TRANSITION_RUN]")) {

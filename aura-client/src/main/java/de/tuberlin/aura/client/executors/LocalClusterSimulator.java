@@ -10,9 +10,10 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.log4j.Logger;
 import org.apache.zookeeper.server.NIOServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import de.tuberlin.aura.core.common.utils.ProcessExecutor;
 import de.tuberlin.aura.core.statistic.MeasurementManager;
@@ -37,7 +38,7 @@ public final class LocalClusterSimulator {
     // Fields.
     // ---------------------------------------------------
 
-    private static final Logger LOG = Logger.getLogger(LocalClusterSimulator.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LocalClusterSimulator.class);
 
     private final Set<Integer> reservedPorts;
 
@@ -100,7 +101,7 @@ public final class LocalClusterSimulator {
                 try {
                     FileUtils.deleteDirectory(dir);
                 } catch (IOException e) {
-                    LOG.error(e);
+                    LOG.error(e.getLocalizedMessage(), e);
                 }
             }
 
@@ -119,7 +120,6 @@ public final class LocalClusterSimulator {
         }
 
         // ------- bootstrap local cluster -------
-
         switch (mode) {
 
             case EXECUTION_MODE_SINGLE_PROCESS: {
@@ -134,19 +134,22 @@ public final class LocalClusterSimulator {
                 break;
 
             case EXECUTION_MODE_MULTIPLE_PROCESSES: {
+                peList.add(new ProcessExecutor(WorkloadManager.class).execute(zkServer,
+                                                                              Integer.toString(getFreePort()),
+                                                                              Integer.toString(getFreePort()),
+                                                                              measurementPath));
+
                 try {
-                    peList.add(new ProcessExecutor(WorkloadManager.class).execute(zkServer,
-                                                                                  Integer.toString(getFreePort()),
-                                                                                  Integer.toString(getFreePort())));
-                    Thread.sleep(1000);
-                    for (int i = 0; i < numNodes; ++i) {
-                        peList.add(new ProcessExecutor(TaskManager.class).execute(zkServer,
-                                                                                  Integer.toString(getFreePort()),
-                                                                                  Integer.toString(getFreePort())));
-                        Thread.sleep(1000);
-                    }
+                    Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                }
+
+                for (int i = 0; i < numNodes; ++i) {
+                    peList.add(new ProcessExecutor(TaskManager.class).execute(zkServer,
+                                                                              Integer.toString(getFreePort()),
+                                                                              Integer.toString(getFreePort()),
+                                                                              measurementPath));
                 }
             }
                 break;
@@ -186,7 +189,7 @@ public final class LocalClusterSimulator {
                 freePort = ss.getLocalPort();
                 ss.close();
             } catch (IOException e) {
-                LOG.info(e);
+                LOG.info(e.getLocalizedMessage(), e);
             }
         } while (reservedPorts.contains(freePort) || freePort < 1024 || freePort > 65535);
         reservedPorts.add(freePort);

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import de.tuberlin.aura.client.api.AuraClient;
+import de.tuberlin.aura.client.executors.LocalClusterSimulator;
 import de.tuberlin.aura.core.common.eventsystem.EventHandler;
 import de.tuberlin.aura.core.descriptors.Descriptors;
 import de.tuberlin.aura.core.iosystem.IOEvents;
@@ -34,7 +35,7 @@ public final class SanityClient {
     /**
      * Logger.
      */
-    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(SanityClient.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SanityClient.class);
 
     // Disallow Instantiation.
     private SanityClient() {}
@@ -286,25 +287,24 @@ public final class SanityClient {
         // LOG.addAppender(consoleAppender);
         // LOG.setLevel(Level.INFO);
 
-        int machines = 99;
+        int machines = 6;
 
         // Local
-        // final String measurementPath = "/home/teots/Desktop/logs";
-        // final String zookeeperAddress = "localhost:2181";
-        // final LocalClusterSimulator lce =
-        // new
-        // LocalClusterSimulator(LocalClusterSimulator.ExecutionMode.EXECUTION_MODE_SINGLE_PROCESS,
-        // true,
-        // zookeeperAddress,
-        // machines,
-        // measurementPath);
+        final String measurementPath = "/home/teots/Desktop/logs";
+        final String zookeeperAddress = "localhost:2181";
+        final LocalClusterSimulator lce =
+                new LocalClusterSimulator(LocalClusterSimulator.ExecutionMode.EXECUTION_MODE_MULTIPLE_PROCESSES,
+                                          true,
+                                          zookeeperAddress,
+                                          machines,
+                                          measurementPath);
 
         // Wally
-        final String zookeeperAddress = "wally101.cit.tu-berlin.de:2181";
+        // final String zookeeperAddress = "wally101.cit.tu-berlin.de:2181";
 
         final AuraClient ac = new AuraClient(zookeeperAddress, 10000, 11111);
         List<AuraTopology> topologies = buildTopologies(ac, machines, 8);
-        SubmissionHandler handler = new SubmissionHandler(ac, topologies, 1);
+        SubmissionHandler handler = new SubmissionHandler(ac, topologies, 5);
 
         // Add the job resubmission handler.
         ac.ioManager.addEventListener(IOEvents.ControlEventType.CONTROL_EVENT_TOPOLOGY_FINISHED, handler);
@@ -434,7 +434,7 @@ public final class SanityClient {
         private void handleTopologyFinished(final IOEvents.ControlIOEvent event) {
             if (event != null) {
                 String jobName = (String) event.getPayload();
-                LOG.info("Topology ({}) finished.", jobName);
+                LOG.error("Topology ({}) finished.", jobName);
             }
 
             // Each topology is executed #runs times
@@ -444,6 +444,7 @@ public final class SanityClient {
                 Thread t = new Thread() {
 
                     public void run() {
+                        // TODO: Remove
                         // This break is only necessary to make it easier to distinguish jobs in
                         // the log files.
                         try {
@@ -452,7 +453,7 @@ public final class SanityClient {
                             e.printStackTrace();
                         }
 
-                        LOG.info("Submit: {}", topologies.get(jobIndex).name);
+                        LOG.error("Submit: {} - run {}/{}", topologies.get(jobIndex).name, ((jobCounter - 1) % runs) + 1, runs);
                         client.submitTopology(topologies.get(jobIndex), null);
                     }
                 };

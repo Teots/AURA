@@ -3,7 +3,8 @@ package de.tuberlin.aura.taskmanager;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import de.tuberlin.aura.core.common.eventsystem.EventHandler;
 import de.tuberlin.aura.core.common.eventsystem.IEventHandler;
@@ -28,7 +29,7 @@ public final class TaskDataConsumer implements DataConsumer {
     // Fields.
     // ---------------------------------------------------
 
-    private static final Logger LOG = Logger.getLogger(TaskDataConsumer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TaskDataConsumer.class);
 
     private final TaskDriverContext driverContext;
 
@@ -65,11 +66,6 @@ public final class TaskDataConsumer implements DataConsumer {
 
         this.allocator = allocator;
 
-        // event handling.
-        this.consumerEventHandler = new ConsumerEventHandler();
-
-        driverContext.driverDispatcher.addEventListener(IOEvents.DataEventType.DATA_EVENT_INPUT_CHANNEL_CONNECTED, consumerEventHandler);
-
         // create mappings for input gates.
         this.taskIDToGateIndex = new HashMap<>();
 
@@ -90,6 +86,10 @@ public final class TaskDataConsumer implements DataConsumer {
         this.areInputsGatesExhausted = false;
 
         setupInputGates();
+
+        // event handling.
+        this.consumerEventHandler = new ConsumerEventHandler();
+        driverContext.driverDispatcher.addEventListener(IOEvents.DataEventType.DATA_EVENT_INPUT_CHANNEL_CONNECTED, consumerEventHandler);
     }
 
     // ---------------------------------------------------
@@ -302,6 +302,10 @@ public final class TaskDataConsumer implements DataConsumer {
         @Handle(event = IOEvents.GenericIOEvent.class, type = IOEvents.DataEventType.DATA_EVENT_INPUT_CHANNEL_CONNECTED)
         private void handleTaskInputDataChannelConnect(final IOEvents.GenericIOEvent event) {
 
+            LOG.debug("DATA_EVENT_INPUT_CHANNEL_CONNECTED to be processed from {} to {}", event.srcTaskID, event.dstTaskID);
+
+            boolean found = false;
+
             int gateIndex = 0;
             boolean allInputGatesConnected = true, connectingToCorrectTask = false;
 
@@ -328,6 +332,8 @@ public final class TaskDataConsumer implements DataConsumer {
                         LOG.debug("INPUT CONNECTION FROM " + inputTask.name + " [" + inputTask.taskID + "] TO TASK "
                                 + driverContext.taskDescriptor.name + " [" + driverContext.taskDescriptor.taskID + "] IS ESTABLISHED");
 
+                        found = true;
+
                         connectingToCorrectTask |= true;
                     }
 
@@ -347,6 +353,8 @@ public final class TaskDataConsumer implements DataConsumer {
                 allInputGatesConnected &= allInputChannelsPerGateConnected;
                 ++gateIndex;
             }
+
+
 
             // Check if the incoming channel is connecting to the correct task.
             if (!connectingToCorrectTask) {

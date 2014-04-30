@@ -1,5 +1,6 @@
 package de.tuberlin.aura.core.common.eventsystem;
 
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,8 @@ public class EventDispatcher implements IEventDispatcher {
 
     private final BlockingQueue<Event> eventQueue;
 
+    private final List<Event> stickyEvents;
+
     // ---------------------------------------------------
     // Constructors.
     // ---------------------------------------------------
@@ -69,6 +72,8 @@ public class EventDispatcher implements IEventDispatcher {
 
         this.isRunning = new AtomicBoolean(useDispatchThread);
 
+        this.stickyEvents = new LinkedList<>();
+
         this.eventQueue = useDispatchThread ? new LinkedBlockingQueue<Event>() : null;
 
         if (useDispatchThread) {
@@ -83,7 +88,14 @@ public class EventDispatcher implements IEventDispatcher {
 
                             // Stop dispatching thread, if a poison pill was received.
                             if (event.type != IOEvents.InternalEventType.POISON_PILL_TERMINATION) {
-                                dispatch(event);
+                                synchronized (EventDispatcher.this) {
+                                    if (!dispatch(event)) {
+                                        if (event.sticky) {
+                                            LOG.debug("Add sticky event {}", event);
+                                            EventDispatcher.this.stickyEvents.add(event);
+                                        }
+                                    }
+                                }
                             } else {
                                 LOG.trace("Poison pill received");
                             }
@@ -120,6 +132,8 @@ public class EventDispatcher implements IEventDispatcher {
      */
     @Override
     public synchronized void addEventListener(final String type, final IEventHandler listener) {
+        LOG.debug("Add listener for {} [{}]", type, listener);
+
         // sanity check.
         if (type == null)
             throw new IllegalArgumentException("type == null");
@@ -131,7 +145,9 @@ public class EventDispatcher implements IEventDispatcher {
             listeners = new LinkedList<>();
             listenerMap.put(type, listeners);
         }
+
         listeners.add(listener);
+        checkStickyEvents(type, listener);
     }
 
     /**
@@ -146,8 +162,32 @@ public class EventDispatcher implements IEventDispatcher {
         if (listener == null)
             throw new IllegalArgumentException("listener == null");
 
-        for (final String type : types)
+        for (final String type : types) {
+            LOG.debug("Add listener for {} [{}]", type, listener);
+
             addEventListener(type, listener);
+            checkStickyEvents(type, listener);
+        }
+    }
+
+    private void checkStickyEvents(final String type, final IEventHandler listener) {
+        Iterator<Event> it = this.stickyEvents.iterator();
+        while (it.hasNext()) {
+            Event event = it.next();
+
+            if (event.type.equals(type)) {
+                LOG.info("Process sticky event {}", event);
+
+                if (useDispatchThread) {
+                    eventQueue.add(event);
+                } else {
+                    listener.handleEvent(event);
+                }
+
+                // This event was handled now and thus it can be removed.
+                it.remove();
+            }
+        }
     }
 
     /**
@@ -210,7 +250,14 @@ public class EventDispatcher implements IEventDispatcher {
             // }
 
         } else {
-            dispatch(event);
+            synchronized (this) {
+                if (!dispatch(event)) {
+                    if (event.sticky) {
+                        LOG.debug("Add sticky event {}", event);
+                        EventDispatcher.this.stickyEvents.add(event);
+                    }
+                }
+            }
         }
     }
 
@@ -250,7 +297,7 @@ public class EventDispatcher implements IEventDispatcher {
     /**
      * @param event
      */
-    private synchronized void dispatch(final Event event) {
+    private synchronized boolean dispatch(final Event event) {
         final List<IEventHandler> listeners = listenerMap.get(event.type);
         if (listeners != null) {
             for (final IEventHandler el : listeners) {
@@ -262,8 +309,19 @@ public class EventDispatcher implements IEventDispatcher {
                 }
             }
         } else { // listeners == null
-            LOG.debug("no listener registered for event " + event.type);
+            LOG.info("no listener registered for event " + event.type);
+
+            // TODO: Remove
+            if (event instanceof IOEvents.DataIOEvent) {
+                IOEvents.DataIOEvent e2 = (IOEvents.DataIOEvent) event;
+                LOG.info("type {} from {} to {}", e2.type, e2.srcTaskID, e2.dstTaskID);
+            }
+
+            // Event wasn't processed by any event handler.
+            return false;
         }
+
+        return true;
     }
 
     @Override
